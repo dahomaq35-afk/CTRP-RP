@@ -1,6 +1,9 @@
 import os
 import sqlite3
 from datetime import datetime, timezone
+from threading import Thread
+
+from flask import Flask
 
 import discord
 from discord import app_commands
@@ -29,12 +32,37 @@ SECTORS = {
 
 
 # =========================================================
+# FAKE WEB SERVER FOR RENDER
+# =========================================================
+
+app = Flask(__name__)
+
+
+@app.route("/")
+def home():
+    return "CTRP RP Bot is Online!"
+
+
+@app.route("/health")
+def health():
+    return "OK"
+
+
+def run_web():
+    port = int(os.environ.get("PORT", 10000))
+
+    app.run(
+        host="0.0.0.0",
+        port=port
+    )
+
+
+# =========================================================
 # BOT
 # =========================================================
 
 intents = discord.Intents.default()
 intents.guilds = True
-intents.members = True
 
 bot = commands.Bot(
     command_prefix="!",
@@ -47,14 +75,18 @@ bot = commands.Bot(
 # =========================================================
 
 def get_db():
+
     conn = sqlite3.connect(DB_FILE)
+
     conn.row_factory = sqlite3.Row
+
     return conn
 
 
 def init_database():
 
     conn = get_db()
+
     cur = conn.cursor()
 
     cur.execute("""
@@ -79,6 +111,7 @@ def init_database():
     """)
 
     conn.commit()
+
     conn.close()
 
 
@@ -86,7 +119,10 @@ def init_database():
 # SECTOR SETTINGS
 # =========================================================
 
-def get_sector_role(guild_id: int, sector: str):
+def get_sector_role(
+    guild_id: int,
+    sector: str
+):
 
     conn = get_db()
 
@@ -135,6 +171,7 @@ def set_sector_role(
     ))
 
     conn.commit()
+
     conn.close()
 
 
@@ -202,6 +239,7 @@ def save_announcement(
     ))
 
     conn.commit()
+
     conn.close()
 
 
@@ -241,9 +279,9 @@ class SectorSelect(discord.ui.Select):
 
         sector = self.values[0]
 
-        # -------------------------
+        # =================================================
         # ANNOUNCEMENT
-        # -------------------------
+        # =================================================
 
         if self.mode == "announcement":
 
@@ -265,9 +303,9 @@ class SectorSelect(discord.ui.Select):
 
             return
 
-        # -------------------------
+        # =================================================
         # SETUP
-        # -------------------------
+        # =================================================
 
         if self.mode == "setup":
 
@@ -491,13 +529,17 @@ class AnnouncementChannelSelect(
         )
 
         embed.set_footer(
-            text=interaction.guild.name
+            text="CTRP"
         )
 
         try:
 
             await channel.send(
-                content=role_mention if role_mention else None,
+                content=(
+                    role_mention
+                    if role_mention
+                    else None
+                ),
                 embed=embed,
                 allowed_mentions=discord.AllowedMentions(
                     roles=True
@@ -579,7 +621,7 @@ async def announcement_command(
         return
 
     await interaction.response.send_message(
-        "📢 **نظام التعميمات الرسمية**\n\n"
+        "📢 **نظام التعميمات الرسمية CTRP**\n\n"
         "اختر القطاع أو الوزارة:",
         view=SectorView("announcement"),
         ephemeral=True
@@ -602,7 +644,7 @@ async def rp_setup_command(
 ):
 
     await interaction.response.send_message(
-        "⚙️ **إعداد قطاعات RP**\n\n"
+        "⚙️ **إعداد قطاعات CTRP**\n\n"
         "اختر القطاع ثم اختر الرتبة الخاصة به:",
         view=SectorView("setup"),
         ephemeral=True
@@ -654,19 +696,11 @@ async def announcement_logs_command(
 
     for row in rows:
 
-        member = interaction.guild.get_member(
-            row["user_id"]
-        )
-
         channel = interaction.guild.get_channel(
             row["channel_id"]
         )
 
-        user_text = (
-            member.mention
-            if member
-            else f"<@{row['user_id']}>"
-        )
+        user_text = f"<@{row['user_id']}>"
 
         channel_text = (
             channel.mention
@@ -704,7 +738,7 @@ async def announcement_logs_command(
 
 @bot.tree.command(
     name="rp_الحالة",
-    description="عرض حالة إعداد قطاعات RP"
+    description="عرض حالة إعداد قطاعات CTRP"
 )
 @app_commands.checks.has_permissions(
     administrator=True
@@ -714,7 +748,7 @@ async def rp_status_command(
 ):
 
     embed = discord.Embed(
-        title="⚙️ حالة قطاعات RP",
+        title="⚙️ حالة قطاعات CTRP",
         color=discord.Color.dark_blue()
     )
 
@@ -810,7 +844,7 @@ async def on_app_command_error(
 async def on_ready():
 
     print(
-        f"✅ Logged in as {bot.user}"
+        f"✅ CTRP RP Bot logged in as {bot.user}"
     )
 
     try:
@@ -843,4 +877,13 @@ if __name__ == "__main__":
             "DISCORD_TOKEN غير موجود في Environment Variables"
         )
 
+    # تشغيل السيرفر الوهمي لـ Render
+    web_thread = Thread(
+        target=run_web,
+        daemon=True
+    )
+
+    web_thread.start()
+
+    # تشغيل البوت
     bot.run(TOKEN)
